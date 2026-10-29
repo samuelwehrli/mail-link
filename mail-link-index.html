@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Mail öffnen</title>
+<style>
+  :root { --bg:#f6f5f2; --fg:#1c1b19; --muted:#6b6a65; --card:#ffffff; --line:#dcdad3; --accent:#2f6fde; --accent-fg:#fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#191918; --fg:#ecebe7; --muted:#a3a19a; --card:#232321; --line:#3a3936; --accent:#6c9cf0; --accent-fg:#111; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:32px 16px; }
+  h1 { font-size:1.3rem; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .btn { display:block; width:100%; text-align:center; padding:12px; border-radius:10px; border:1px solid var(--line);
+         background:var(--card); color:var(--fg); text-decoration:none; font-weight:600; margin-bottom:8px; cursor:pointer; font-size:1rem; }
+  .btn.primary { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+  .hint { color:var(--muted); font-size:.85rem; margin:-4px 0 8px; }
+  code, textarea, input { font-family: ui-monospace, Menlo, monospace; font-size:.85rem; }
+  .id { word-break:break-all; background:var(--bg); padding:8px; border-radius:8px; display:block; margin:6px 0 8px; }
+  label { font-size:.9rem; }
+  select, input, textarea { width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  textarea { min-height:64px; }
+  .row { margin-bottom:10px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <!-- Ansicht 1: Message-ID im Fragment → weiterleiten -->
+  <section id="open" hidden>
+    <h1>Mail wird geöffnet …</h1>
+    <p class="sub" id="status"></p>
+    <div class="card">
+      <a class="btn primary" id="btn-mail" href="#">In Apple Mail öffnen</a>
+      <a class="btn" id="btn-gmail" href="#" rel="noreferrer">In Gmail öffnen</a>
+      <p class="hint">Gmail findet nur Mails, die im Gmail-Konto liegen.</p>
+    </div>
+    <div class="card">
+      <label>Message-ID</label>
+      <code class="id" id="mid"></code>
+      <button class="btn" id="btn-copy" type="button">Message-ID kopieren</button>
+    </div>
+    <div class="card">
+      <div class="row">
+        <label for="pref">Auf diesem Gerät öffnen mit</label>
+        <select id="pref">
+          <option value="auto">Automatisch (Apple → Mail, sonst Gmail)</option>
+          <option value="mail">Immer Apple Mail</option>
+          <option value="gmail">Immer Gmail</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- Ansicht 2: kein Fragment → Link-Generator -->
+  <section id="gen" hidden>
+    <h1>Mail-Link erstellen</h1>
+    <p class="sub">Message-ID einfügen (mit oder ohne &lt; &gt;). Der Link funktioniert in Notion und überall sonst.</p>
+    <div class="card">
+      <div class="row"><input id="in" placeholder="z. B. abc123@mail.example.com" autocomplete="off"></div>
+      <div class="row"><label>Link</label><textarea id="out-url" readonly></textarea></div>
+      <div class="row"><label>Markdown</label><textarea id="out-md" readonly></textarea></div>
+      <button class="btn" id="btn-copy-url" type="button">Link kopieren</button>
+    </div>
+  </section>
+</main>
+<script>
+(function () {
+  "use strict";
+  var KEY = "mail-link-pref";
+
+  function cleanId(s) {
+    s = String(s || "").trim();
+    try { s = decodeURIComponent(s); } catch (e) { /* schon dekodiert */ }
+    return s.trim().replace(/^</, "").replace(/>$/, "").trim();
+  }
+  function mailUrl(id) {
+    return "message://" + encodeURIComponent("<" + id + ">").replace(/%40/g, "@");
+  }
+  function gmailUrl(id) {
+    return "https://mail.google.com/mail/u/0/#search/rfc822msgid%3A" + encodeURIComponent(id);
+  }
+  function isApple() {
+    var ua = navigator.userAgent || "";
+    return /Macintosh|iPhone|iPad|iPod/.test(ua);
+  }
+  function getPref() { try { return localStorage.getItem(KEY) || "auto"; } catch (e) { return "auto"; } }
+  function setPref(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+  function copy(text, btn) {
+    var done = function () { var t = btn.textContent; btn.textContent = "Kopiert ✓"; setTimeout(function () { btn.textContent = t; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {});
+    }
+  }
+
+  window.addEventListener("hashchange", function () { location.reload(); });
+  var id = cleanId(location.hash.replace(/^#/, ""));
+
+  if (id) {
+    document.getElementById("open").hidden = false;
+    var mail = mailUrl(id), gmail = gmailUrl(id);
+    document.getElementById("btn-mail").href = mail;
+    document.getElementById("btn-gmail").href = gmail;
+    document.getElementById("mid").textContent = id;
+    document.getElementById("btn-copy").onclick = function () { copy(id, this); };
+
+    var pref = getPref();
+    var sel = document.getElementById("pref");
+    sel.value = pref;
+    sel.onchange = function () { setPref(sel.value); };
+
+    var useMail = pref === "mail" || (pref === "auto" && isApple());
+    var target = useMail ? mail : gmail;
+    document.getElementById("status").textContent = useMail
+      ? "Weiterleitung zu Apple Mail. Falls nichts passiert, unten tippen."
+      : "Weiterleitung zu Gmail. Falls nichts passiert, unten tippen.";
+    window.__mailLinkTarget = target;
+    if (!window.__noRedirect) { location.href = target; }
+  } else {
+    document.getElementById("gen").hidden = false;
+    var base = location.origin + location.pathname;
+    var inp = document.getElementById("in"), ou = document.getElementById("out-url"), om = document.getElementById("out-md");
+    inp.oninput = function () {
+      var v = cleanId(inp.value);
+      ou.value = v ? base + "#" + encodeURIComponent(v) : "";
+      om.value = v ? "[Mail öffnen](" + ou.value + ")" : "";
+    };
+    document.getElementById("btn-copy-url").onclick = function () { if (ou.value) copy(ou.value, this); };
+  }
+})();
+</script>
+</body>
+</html>
